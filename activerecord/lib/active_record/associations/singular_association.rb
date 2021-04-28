@@ -17,7 +17,7 @@ module ActiveRecord
         replace(record)
       end
 
-      def build(attributes = {}, &block)
+      def build(attributes = nil, &block)
         record = build_record(attributes, &block)
         set_new_record(record)
         record
@@ -37,8 +37,6 @@ module ActiveRecord
 
         def find_target
           super.first
-        rescue ::RangeError
-          nil
         end
 
         def replace(record)
