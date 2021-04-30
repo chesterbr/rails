@@ -96,17 +96,20 @@ Some things that you can achieve with this:
 - Attributes do not need to be backed by a database column.
 
 ```ruby
-
 # db/schema.rb
 create_table :store_listings, force: true do |t|
   t.decimal :price_in_cents
   t.string :my_string, default: "original default"
 end
+```
 
+```ruby
 # app/models/store_listing.rb
 class StoreListing < ActiveRecord::Base
 end
+```
 
+```ruby
 store_listing = StoreListing.new(price_in_cents: '10.1')
 
 # before
@@ -150,7 +153,7 @@ The type of an attribute is given the opportunity to change how dirty
 tracking is performed.
 
 See its
-[documentation](http://api.rubyonrails.org/v5.0.1/classes/ActiveRecord/Attributes/ClassMethods.html)
+[documentation](https://api.rubyonrails.org/v5.0.1/classes/ActiveRecord/Attributes/ClassMethods.html)
 for a detailed write up.
 
 
@@ -251,7 +254,7 @@ Please refer to the [Changelog][railties] for detailed changes.
     using the environment variable `RAILS_LOG_TO_STDOUT`.
     ([Pull Request](https://github.com/rails/rails/pull/23734))
 
-*   Enable HSTS with IncludeSudomains header for new applications.
+*   Enable HSTS with IncludeSubdomains header for new applications.
     ([Pull Request](https://github.com/rails/rails/pull/23852))
 
 *   The application generator writes a new file `config/spring.rb`, which tells
@@ -346,8 +349,8 @@ Please refer to the [Changelog][action-pack] for detailed changes.
     names instead.
     ([commit](https://github.com/rails/rails/commit/83b767ce))
 
-*   Deprecated accessing mime types via constants (eg. `Mime::HTML`). Use the
-    subscript operator with a symbol instead (eg. `Mime[:html]`).
+*   Deprecated accessing mime types via constants (e.g. `Mime::HTML`). Use the
+    subscript operator with a symbol instead (e.g. `Mime[:html]`).
     ([Pull Request](https://github.com/rails/rails/pull/21869))
 
 *   Deprecated `redirect_to :back` in favor of `redirect_back`, which accepts a
@@ -1081,7 +1084,7 @@ Credits
 -------
 
 See the
-[full list of contributors to Rails](http://contributors.rubyonrails.org/) for
+[full list of contributors to Rails](https://contributors.rubyonrails.org/) for
 the many people who spent many hours making Rails, the stable and robust
 framework it is. Kudos to all of them.
 

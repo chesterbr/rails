@@ -26,7 +26,7 @@ module ActionController
 
     # Before processing, set the request formats in current controller formats.
     def process_action(*) #:nodoc:
-      self.formats = request.formats.map(&:ref).compact
+      self.formats = request.formats.filter_map(&:ref)
       super
     end
 
@@ -53,7 +53,6 @@ module ActionController
     end
 
     private
-
       def _process_variant(options)
         if defined?(request) && !request.nil? && request.variant.present?
           options[:variant] = request.variant
@@ -73,8 +72,14 @@ module ActionController
       end
 
       def _set_rendered_content_type(format)
-        if format && !response.content_type
+        if format && !response.media_type
           self.content_type = format.to_s
+        end
+      end
+
+      def _set_vary_header
+        if self.headers["Vary"].blank? && request.should_apply_vary_header?
+          self.headers["Vary"] = "Accept"
         end
       end
 
