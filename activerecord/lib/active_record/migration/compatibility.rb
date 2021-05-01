@@ -13,16 +13,124 @@ module ActiveRecord
         const_get(name)
       end
 
-      V6_0 = Current
+      V7_0 = Current
+
+      class V6_1 < V7_0
+      end
+
+      class V6_0 < V6_1
+        class ReferenceDefinition < ConnectionAdapters::ReferenceDefinition
+          def index_options(table_name)
+            as_options(index)
+          end
+        end
+
+        module TableDefinition
+          def references(*args, **options)
+            args.each do |ref_name|
+              ReferenceDefinition.new(ref_name, **options).add_to(self)
+            end
+          end
+          alias :belongs_to :references
+        end
+
+        def create_table(table_name, **options)
+          if block_given?
+            super { |t| yield compatible_table_definition(t) }
+          else
+            super
+          end
+        end
+
+        def change_table(table_name, **options)
+          if block_given?
+            super { |t| yield compatible_table_definition(t) }
+          else
+            super
+          end
+        end
+
+        def create_join_table(table_1, table_2, **options)
+          if block_given?
+            super { |t| yield compatible_table_definition(t) }
+          else
+            super
+          end
+        end
+
+        def add_reference(table_name, ref_name, **options)
+          ReferenceDefinition.new(ref_name, **options)
+            .add_to(connection.update_table_definition(table_name, self))
+        end
+        alias :add_belongs_to :add_reference
+
+        private
+          def compatible_table_definition(t)
+            class << t
+              prepend TableDefinition
+            end
+            t
+          end
+      end
 
       class V5_2 < V6_0
+        module TableDefinition
+          def timestamps(**options)
+            options[:precision] ||= nil
+            super
+          end
+        end
+
         module CommandRecorder
           def invert_transaction(args, &block)
             [:transaction, args, block]
           end
+
+          def invert_change_column_comment(args)
+            [:change_column_comment, args]
+          end
+
+          def invert_change_table_comment(args)
+            [:change_table_comment, args]
+          end
+        end
+
+        def create_table(table_name, **options)
+          if block_given?
+            super { |t| yield compatible_table_definition(t) }
+          else
+            super
+          end
+        end
+
+        def change_table(table_name, **options)
+          if block_given?
+            super { |t| yield compatible_table_definition(t) }
+          else
+            super
+          end
+        end
+
+        def create_join_table(table_1, table_2, **options)
+          if block_given?
+            super { |t| yield compatible_table_definition(t) }
+          else
+            super
+          end
+        end
+
+        def add_timestamps(table_name, **options)
+          options[:precision] ||= nil
+          super
         end
 
         private
+          def compatible_table_definition(t)
+            class << t
+              prepend TableDefinition
+            end
+            t
+          end
 
           def command_recorder
             recorder = super
@@ -34,21 +142,19 @@ module ActiveRecord
       end
 
       class V5_1 < V5_2
-        def change_column(table_name, column_name, type, options = {})
-          if adapter_name == "PostgreSQL"
-            clear_cache!
-            sql = connection.send(:change_column_sql, table_name, column_name, type, options)
-            execute "ALTER TABLE #{quote_table_name(table_name)} #{sql}"
-            change_column_default(table_name, column_name, options[:default]) if options.key?(:default)
-            change_column_null(table_name, column_name, options[:null], options[:default]) if options.key?(:null)
-            change_column_comment(table_name, column_name, options[:comment]) if options.key?(:comment)
+        def change_column(table_name, column_name, type, **options)
+          if connection.adapter_name == "PostgreSQL"
+            super(table_name, column_name, type, **options.except(:default, :null, :comment))
+            connection.change_column_default(table_name, column_name, options[:default]) if options.key?(:default)
+            connection.change_column_null(table_name, column_name, options[:null], options[:default]) if options.key?(:null)
+            connection.change_column_comment(table_name, column_name, options[:comment]) if options.key?(:comment)
           else
             super
           end
         end
 
-        def create_table(table_name, options = {})
-          if adapter_name == "Mysql2"
+        def create_table(table_name, **options)
+          if connection.adapter_name == "Mysql2"
             super(table_name, options: "ENGINE=InnoDB", **options)
           else
             super
@@ -69,14 +175,14 @@ module ActiveRecord
           alias :belongs_to :references
         end
 
-        def create_table(table_name, options = {})
-          if adapter_name == "PostgreSQL"
+        def create_table(table_name, **options)
+          if connection.adapter_name == "PostgreSQL"
             if options[:id] == :uuid && !options.key?(:default)
               options[:default] = "uuid_generate_v4()"
             end
           end
 
-          unless adapter_name == "Mysql2" && options[:id] == :bigint
+          unless connection.adapter_name == "Mysql2" && options[:id] == :bigint
             if [:integer, :bigint].include?(options[:id]) && !options.key?(:default)
               options[:default] = nil
             end
@@ -89,38 +195,15 @@ module ActiveRecord
             options[:id] = :integer
           end
 
-          if block_given?
-            super do |t|
-              yield compatible_table_definition(t)
-            end
-          else
-            super
-          end
-        end
-
-        def change_table(table_name, options = {})
-          if block_given?
-            super do |t|
-              yield compatible_table_definition(t)
-            end
-          else
-            super
-          end
+          super
         end
 
         def create_join_table(table_1, table_2, column_options: {}, **options)
           column_options.reverse_merge!(type: :integer)
-
-          if block_given?
-            super do |t|
-              yield compatible_table_definition(t)
-            end
-          else
-            super
-          end
+          super
         end
 
-        def add_column(table_name, column_name, type, options = {})
+        def add_column(table_name, column_name, type, **options)
           if type == :primary_key
             type = :integer
             options[:primary_key] = true
@@ -138,7 +221,7 @@ module ActiveRecord
             class << t
               prepend TableDefinition
             end
-            t
+            super
           end
       end
 
@@ -156,52 +239,31 @@ module ActiveRecord
           end
         end
 
-        def create_table(table_name, options = {})
-          if block_given?
-            super do |t|
-              yield compatible_table_definition(t)
-            end
-          else
-            super
-          end
-        end
-
-        def change_table(table_name, options = {})
-          if block_given?
-            super do |t|
-              yield compatible_table_definition(t)
-            end
-          else
-            super
-          end
-        end
-
-        def add_reference(*, **options)
+        def add_reference(table_name, ref_name, **options)
           options[:index] ||= false
           super
         end
         alias :add_belongs_to :add_reference
 
-        def add_timestamps(_, **options)
+        def add_timestamps(table_name, **options)
           options[:null] = true if options[:null].nil?
           super
         end
 
-        def index_exists?(table_name, column_name, options = {})
+        def index_exists?(table_name, column_name, **options)
           column_names = Array(column_name).map(&:to_s)
           options[:name] =
             if options[:name].present?
               options[:name].to_s
             else
-              index_name(table_name, column: column_names)
+              connection.index_name(table_name, column: column_names)
             end
           super
         end
 
-        def remove_index(table_name, options = {})
-          options = { column: options } unless options.is_a?(Hash)
-          options[:name] = index_name_for_remove(table_name, options)
-          super(table_name, options)
+        def remove_index(table_name, column_name = nil, **options)
+          options[:name] = index_name_for_remove(table_name, column_name, options)
+          super
         end
 
         private
@@ -212,16 +274,17 @@ module ActiveRecord
             super
           end
 
-          def index_name_for_remove(table_name, options = {})
-            index_name = index_name(table_name, options)
+          def index_name_for_remove(table_name, column_name, options)
+            index_name = connection.index_name(table_name, column_name || options)
 
-            unless index_name_exists?(table_name, index_name)
-              if options.is_a?(Hash) && options.has_key?(:name)
-                options_without_column = options.dup
-                options_without_column.delete :column
-                index_name_without_column = index_name(table_name, options_without_column)
+            unless connection.index_name_exists?(table_name, index_name)
+              if options.key?(:name)
+                options_without_column = options.except(:column)
+                index_name_without_column = connection.index_name(table_name, options_without_column)
 
-                return index_name_without_column if index_name_exists?(table_name, index_name_without_column)
+                if connection.index_name_exists?(table_name, index_name_without_column)
+                  return index_name_without_column
+                end
               end
 
               raise ArgumentError, "Index name '#{index_name}' on table '#{table_name}' does not exist"
