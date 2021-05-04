@@ -33,6 +33,7 @@ class SchemaDumperTest < ActiveRecord::TestCase
 
     schema_info = ActiveRecord::Base.connection.dump_schema_information
     assert_match(/20100201010101.*20100301010101/m, schema_info)
+    assert_includes schema_info, "20100101010101"
   ensure
     ActiveRecord::SchemaMigration.delete_all
   end
@@ -199,6 +200,17 @@ class SchemaDumperTest < ActiveRecord::TestCase
     end
   end
 
+  if ActiveRecord::Base.connection.supports_check_constraints?
+    def test_schema_dumps_check_constraints
+      constraint_definition = dump_table_schema("products").split(/\n/).grep(/t.check_constraint.*products_price_check/).first.strip
+      if current_adapter?(:Mysql2Adapter)
+        assert_equal 't.check_constraint "`price` > `discounted_price`", name: "products_price_check"', constraint_definition
+      else
+        assert_equal 't.check_constraint "price > discounted_price", name: "products_price_check"', constraint_definition
+      end
+    end
+  end
+
   def test_schema_dump_should_honor_nonstandard_primary_keys
     output = standard_dump
     match = output.match(%r{create_table "movies"(.*)do})
@@ -226,6 +238,12 @@ class SchemaDumperTest < ActiveRecord::TestCase
     assert_match %r{t\.float\s+"temperature"$}, output
   end
 
+  def test_schema_dump_aliased_types
+    output = standard_dump
+    assert_match %r{t\.binary\s+"blob_data"$}, output
+    assert_match %r{t\.decimal\s+"numeric_number"}, output
+  end
+
   if ActiveRecord::Base.connection.supports_expression_index?
     def test_schema_dump_expression_indices
       index_definition = dump_table_schema("companies").split(/\n/).grep(/t\.index.*company_expression_index/).first.strip
@@ -245,25 +263,31 @@ class SchemaDumperTest < ActiveRecord::TestCase
 
   if current_adapter?(:Mysql2Adapter)
     def test_schema_dump_includes_length_for_mysql_binary_fields
-      output = standard_dump
+      output = dump_table_schema "binary_fields"
       assert_match %r{t\.binary\s+"var_binary",\s+limit: 255$}, output
       assert_match %r{t\.binary\s+"var_binary_large",\s+limit: 4095$}, output
     end
 
     def test_schema_dump_includes_length_for_mysql_blob_and_text_fields
-      output = standard_dump
-      assert_match %r{t\.blob\s+"tiny_blob",\s+limit: 255$}, output
+      output = dump_table_schema "binary_fields"
+      assert_match %r{t\.binary\s+"tiny_blob",\s+size: :tiny$}, output
       assert_match %r{t\.binary\s+"normal_blob"$}, output
-      assert_match %r{t\.binary\s+"medium_blob",\s+limit: 16777215$}, output
-      assert_match %r{t\.binary\s+"long_blob",\s+limit: 4294967295$}, output
-      assert_match %r{t\.text\s+"tiny_text",\s+limit: 255$}, output
+      assert_match %r{t\.binary\s+"medium_blob",\s+size: :medium$}, output
+      assert_match %r{t\.binary\s+"long_blob",\s+size: :long$}, output
+      assert_match %r{t\.text\s+"tiny_text",\s+size: :tiny$}, output
       assert_match %r{t\.text\s+"normal_text"$}, output
-      assert_match %r{t\.text\s+"medium_text",\s+limit: 16777215$}, output
-      assert_match %r{t\.text\s+"long_text",\s+limit: 4294967295$}, output
+      assert_match %r{t\.text\s+"medium_text",\s+size: :medium$}, output
+      assert_match %r{t\.text\s+"long_text",\s+size: :long$}, output
+      assert_match %r{t\.binary\s+"tiny_blob_2",\s+size: :tiny$}, output
+      assert_match %r{t\.binary\s+"medium_blob_2",\s+size: :medium$}, output
+      assert_match %r{t\.binary\s+"long_blob_2",\s+size: :long$}, output
+      assert_match %r{t\.text\s+"tiny_text_2",\s+size: :tiny$}, output
+      assert_match %r{t\.text\s+"medium_text_2",\s+size: :medium$}, output
+      assert_match %r{t\.text\s+"long_text_2",\s+size: :long$}, output
     end
 
     def test_schema_does_not_include_limit_for_emulated_mysql_boolean_fields
-      output = standard_dump
+      output = dump_table_schema "booleans"
       assert_no_match %r{t\.boolean\s+"has_fun",.+limit: 1}, output
     end
 
@@ -287,7 +311,7 @@ class SchemaDumperTest < ActiveRecord::TestCase
 
     def test_schema_dump_includes_limit_on_array_type
       output = dump_table_schema "bigint_array"
-      assert_match %r{t\.bigint\s+"big_int_data_points\",\s+array: true}, output
+      assert_match %r{t\.bigint\s+"big_int_data_points",\s+array: true}, output
     end
 
     def test_schema_dump_allows_array_of_decimal_defaults
@@ -344,8 +368,6 @@ class SchemaDumperTest < ActiveRecord::TestCase
     # Oracle supports precision up to 38 and it identifies decimals with scale 0 as integers
     if current_adapter?(:OracleAdapter)
       assert_match %r{t\.integer\s+"atoms_in_universe",\s+precision: 38}, output
-    elsif current_adapter?(:FbAdapter)
-      assert_match %r{t\.integer\s+"atoms_in_universe",\s+precision: 18}, output
     else
       assert_match %r{t\.decimal\s+"atoms_in_universe",\s+precision: 55}, output
     end
@@ -475,6 +497,86 @@ class SchemaDumperTest < ActiveRecord::TestCase
 
     $stdout = original
   end
+
+  if current_adapter?(:PostgreSQLAdapter)
+    def test_schema_dump_with_correct_timestamp_types_via_create_table_and_t_column
+      original, $stdout = $stdout, StringIO.new
+
+      migration = Class.new(ActiveRecord::Migration::Current) do
+        def up
+          create_table("timestamps") do |t|
+            t.datetime :default_format
+            t.column :without_time_zone, :timestamp
+            t.column :with_time_zone, :timestamptz
+          end
+        end
+        def down
+          drop_table("timestamps")
+        end
+      end
+      migration.migrate(:up)
+
+      output = perform_schema_dump
+      assert output.include?('t.datetime "default_format"')
+      assert output.include?('t.datetime "without_time_zone"')
+      assert output.include?('t.timestamptz "with_time_zone"')
+    ensure
+      migration.migrate(:down)
+      $stdout = original
+    end
+
+    def test_schema_dump_with_correct_timestamp_types_via_create_table_and_t_timestamptz
+      original, $stdout = $stdout, StringIO.new
+
+      migration = Class.new(ActiveRecord::Migration::Current) do
+        def up
+          create_table("timestamps") do |t|
+            t.datetime :default_format
+            t.datetime :without_time_zone
+            t.timestamptz :with_time_zone
+          end
+        end
+        def down
+          drop_table("timestamps")
+        end
+      end
+      migration.migrate(:up)
+
+      output = perform_schema_dump
+      assert output.include?('t.datetime "default_format"')
+      assert output.include?('t.datetime "without_time_zone"')
+      assert output.include?('t.timestamptz "with_time_zone"')
+    ensure
+      migration.migrate(:down)
+      $stdout = original
+    end
+
+    def test_schema_dump_with_correct_timestamp_types_via_add_column
+      original, $stdout = $stdout, StringIO.new
+
+      migration = Class.new(ActiveRecord::Migration::Current) do
+        def up
+          create_table("timestamps")
+
+          add_column :timestamps, :default_format, :datetime
+          add_column :timestamps, :without_time_zone, :timestamp
+          add_column :timestamps, :with_time_zone, :timestamptz
+        end
+        def down
+          drop_table("timestamps")
+        end
+      end
+      migration.migrate(:up)
+
+      output = perform_schema_dump
+      assert output.include?('t.datetime "default_format"')
+      assert output.include?('t.datetime "without_time_zone"')
+      assert output.include?('t.timestamptz "with_time_zone"')
+    ensure
+      migration.migrate(:down)
+      $stdout = original
+    end
+  end
 end
 
 class SchemaDumperDefaultsTest < ActiveRecord::TestCase
@@ -494,6 +596,10 @@ class SchemaDumperDefaultsTest < ActiveRecord::TestCase
       @connection.create_table :infinity_defaults, force: true do |t|
         t.float    :float_with_inf_default,    default: Float::INFINITY
         t.float    :float_with_nan_default,    default: Float::NAN
+        t.datetime :beginning_of_time,         default: "-infinity"
+        t.datetime :end_of_time,               default: "infinity"
+        t.date :date_with_neg_inf_default,     default: -::Float::INFINITY
+        t.date :date_with_pos_inf_default,     default: ::Float::INFINITY
       end
     end
   end
@@ -512,10 +618,14 @@ class SchemaDumperDefaultsTest < ActiveRecord::TestCase
     assert_match %r{t\.decimal\s+"decimal_with_default",\s+precision: 20,\s+scale: 10,\s+default: "1234567890.0123456789"}, output
   end
 
-  def test_schema_dump_with_float_column_infinity_default
+  def test_schema_dump_with_column_infinity_default
     skip unless current_adapter?(:PostgreSQLAdapter)
     output = dump_table_schema("infinity_defaults")
     assert_match %r{t\.float\s+"float_with_inf_default",\s+default: ::Float::INFINITY}, output
     assert_match %r{t\.float\s+"float_with_nan_default",\s+default: ::Float::NAN}, output
+    assert_match %r{t\.datetime\s+"beginning_of_time",\s+default: -::Float::INFINITY}, output
+    assert_match %r{t\.datetime\s+"end_of_time",\s+default: ::Float::INFINITY}, output
+    assert_match %r{t\.date\s+"date_with_neg_inf_default",\s+default: -::Float::INFINITY}, output
+    assert_match %r{t\.date\s+"date_with_pos_inf_default",\s+default: ::Float::INFINITY}, output
   end
 end
