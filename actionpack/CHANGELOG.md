@@ -1,3 +1,15 @@
+*   Writing into a disabled session will now raise an error.
+
+    Previously when no session store was set, writing into the session would silently fail.
+
+    *Jean Boussier*
+
+*   Add support for 'require-trusted-types-for' and 'trusted-types' headers.
+
+    Fixes #42034
+
+    *lfalcao*
+
 *   Remove inline styles and address basic accessibility issues on rescue templates.
 
     *Jacob Herrington*
