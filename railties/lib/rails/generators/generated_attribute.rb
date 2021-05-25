@@ -38,7 +38,6 @@ module Rails
         end
 
         private
-
           # parse possible attribute options like :limit for string/text/binary/integer, :precision/:scale for decimals or :polymorphic for references/belongs_to
           # when declaring options curly brackets should be used
           def parse_type_and_options(type)
@@ -51,6 +50,7 @@ module Rails
               type = $1
               provided_options = $2.split(/[,.-]/)
               options = Hash[provided_options.map { |opt| [opt.to_sym, true] }]
+
               return type, options
             else
               return type, {}
@@ -68,13 +68,15 @@ module Rails
 
       def field_type
         @field_type ||= case type
-                        when :integer              then :number_field
-                        when :float, :decimal      then :text_field
-                        when :time                 then :time_select
-                        when :datetime, :timestamp then :datetime_select
-                        when :date                 then :date_select
-                        when :text                 then :text_area
-                        when :boolean              then :check_box
+                        when :integer                  then :number_field
+                        when :float, :decimal          then :text_field
+                        when :time                     then :time_select
+                        when :datetime, :timestamp     then :datetime_select
+                        when :date                     then :date_select
+                        when :text                     then :text_area
+                        when :rich_text                then :rich_text_area
+                        when :boolean                  then :check_box
+                        when :attachment, :attachments then :file_field
                         else
                           :text_field
         end
@@ -90,18 +92,20 @@ module Rails
                      when :string                      then name == "type" ? "" : "MyString"
                      when :text                        then "MyText"
                      when :boolean                     then false
-                     when :references, :belongs_to     then nil
+                     when :references, :belongs_to,
+                          :attachment, :attachments,
+                          :rich_text                   then nil
                      else
                        ""
         end
       end
 
       def plural_name
-        name.sub(/_id$/, "").pluralize
+        name.delete_suffix("_id").pluralize
       end
 
       def singular_name
-        name.sub(/_id$/, "").singularize
+        name.delete_suffix("_id").singularize
       end
 
       def human_name
@@ -121,7 +125,7 @@ module Rails
       end
 
       def foreign_key?
-        !!(name =~ /_id$/)
+        name.end_with?("_id")
       end
 
       def reference?
@@ -133,7 +137,7 @@ module Rails
       end
 
       def required?
-        attr_options[:required]
+        reference? && Rails.application.config.active_record.belongs_to_required_by_default
       end
 
       def has_index?
@@ -152,6 +156,22 @@ module Rails
         type == :token
       end
 
+      def rich_text?
+        type == :rich_text
+      end
+
+      def attachment?
+        type == :attachment
+      end
+
+      def attachments?
+        type == :attachments
+      end
+
+      def virtual?
+        rich_text? || attachment? || attachments?
+      end
+
       def inject_options
         (+"").tap { |s| options_for_migration.each { |k, v| s << ", #{k}: #{v.inspect}" } }
       end
@@ -163,7 +183,6 @@ module Rails
       def options_for_migration
         @attr_options.dup.tap do |options|
           if required?
-            options.delete(:required)
             options[:null] = false
           end
 
