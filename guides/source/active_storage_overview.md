@@ -35,8 +35,9 @@ files.
 
 ## Setup
 
-Active Storage uses two tables in your application’s database named
-`active_storage_blobs` and `active_storage_attachments`. After creating a new
+Active Storage uses three tables in your application’s database named
+`active_storage_blobs`, `active_storage_variant_records`
+and `active_storage_attachments`. After creating a new
 application (or upgrading your application to Rails 5.2), run
 `bin/rails active_storage:install` to generate a migration that creates these
 tables. Use `bin/rails db:migrate` to run the migration.
@@ -320,7 +321,13 @@ The [`has_one_attached`][] macro sets up a one-to-one mapping between records an
 files. Each record can have one file attached to it.
 
 For example, suppose your application has a `User` model. If you want each user to
-have an avatar, define the `User` model like this:
+have an avatar, run a model generator command as follows:
+
+```ruby
+bin/rails generate model User avatar:attachment
+```
+
+or define the `User` model like this
 
 ```ruby
 class User < ApplicationRecord
@@ -396,7 +403,13 @@ The [`has_many_attached`][] macro sets up a one-to-many relationship between rec
 and files. Each record can have many files attached to it.
 
 For example, suppose your application has a `Message` model. If you want each
-message to have many images, define the `Message` model like this:
+message to have many images, run a model generator command as follows:
+
+```ruby
+bin/rails generate model Message images:attachments
+```
+
+or define the `Message` model like this:
 
 ```ruby
 class Message < ApplicationRecord
