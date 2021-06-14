@@ -1,3 +1,8 @@
+*   Raise `ActiveSupport::EncryptedFile::MissingKeyError` when the
+    `RAILS_MASTER_KEY` environment variable is blank (e.g. `""`).
+
+    *Sunny Ripert*
+
 *   The `from:` option is added to `ActiveSupport::TestCase#assert_no_changes`.
 
     It permits asserting on the initial value that is expected not to change.
@@ -7,7 +12,7 @@
       post :create, params: { status: { ok: true } }
     end
     ```
-  
+
     *George Claghorn*
 
 *   Deprecate `ActiveSupport::SafeBuffer`'s incorrect implicit conversion of objects into string.
@@ -39,7 +44,7 @@
 *   Added a faster and more compact `ActiveSupport::Cache` serialization format.
 
     It can be enabled with `config.active_support.cache_format_version = 7.0` or
-    `config.load_defaults(7.0)`. Regardless of the configuration Active Support
+    `config.load_defaults 7.0`. Regardless of the configuration Active Support
     7.0 can read cache entries serialized by Active Support 6.1 which allows to
     upgrade without invalidating the cache. However Rails 6.1 can't read the
     new format, so all readers must be upgraded before the new format is enabled.
