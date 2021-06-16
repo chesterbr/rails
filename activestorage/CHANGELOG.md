@@ -1,3 +1,27 @@
+
+*   The parameters sent to `ffmpeg` for generating a video preview image are now
+    configurable under `config.active_storage.video_preview_arguments`.
+
+    *Brendon Muir*
+
+*   The ActiveStorage video previewer will now use scene change detection to generate
+    better preview images (rather than the previous default of using the first frame
+    of the video). This change requires FFmpeg v3.4+.
+
+    *Jonathan Hefner*
+
+*   Add support for ActiveStorage expiring URLs.
+
+    ```ruby
+    rails_blob_path(user.avatar, disposition: "attachment", expires_in: 30.minutes)
+
+    <%= image_tag rails_blob_path(user.avatar.variant(resize: "100x100"), expires_in: 30.minutes) %>
+    ```
+
+    If you want to set default expiration time for ActiveStorage URLs throughout your application, set `config.active_storage.urls_expire_in`.
+
+    *aki77*
+
 *   Allow to purge an attachment when record is not persisted for `has_many_attached`
 
     *Jacopo Beschi*
