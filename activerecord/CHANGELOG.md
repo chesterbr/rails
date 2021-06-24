@@ -1,3 +1,64 @@
+*   Do not try to rollback transactions that failed due to a `ActiveRecord::TransactionRollbackError`.
+
+    *Jamie McCarthy*
+
+*   Active Record Encryption will now encode values as UTF-8 when using deterministic
+    encryption. The encoding is part of the encrypted payload, so different encodings for
+    different values result in different ciphertexts. This can break unique constraints and
+    queries.
+
+    The new behavior is configurable via `active_record.encryption.forced_encoding_for_deterministic_encryption`
+    that is `Encoding::UTF_8` by default. It can be disabled by setting it to `nil`.
+
+    *Jorge Manrubia*
+
+*   Disable automatic write protection on replicas.
+
+    Write protection is no longer automatically enabled for replicas.
+    You can manually prevent writes in your app with
+    `while_preventing_writes`. To automatically disable all writes on
+    your replica, configure the database user you are using to connect
+    to your replica to prevent writes. How you configure this is
+    specific to which database adapter you are using, but it usually
+    involves only granting the database user permission to do `SELECT`
+    queries.
+
+    *Adam Hess*
+
+*   The MySQL adapter now cast numbers and booleans bind parameters to to string for safety reasons.
+
+    When comparing a string and a number in a query, MySQL convert the string to a number. So for
+    instance `"foo" = 0`, will implicitly cast `"foo"` to `0` and will evaluate to `TRUE` which can
+    lead to security vulnerabilities.
+
+    Active Record already protect against that vulnerability when it knows the type of the column
+    being compared, however until now it was still vulnerable when using bind parameters:
+
+    ```ruby
+    User.where("login_token = ?", 0).first
+    ```
+
+    Would perform:
+
+    ```sql
+    SELECT * FROM `users` WHERE `login_token` = 0 LIMIT 1;
+    ```
+
+    Now it will perform:
+
+    ```sql
+    SELECT * FROM `users` WHERE `login_token` = '0' LIMIT 1;
+    ```
+
+    *Jean Boussier*
+
+*   Fixture configurations (`_fixture`) are now strictly validated.
+
+    If an error will be raised if that entry contains unknown keys while previously it
+    would silently have no effects.
+
+    *Jean Boussier*
+
 *   Add `ActiveRecord::Base.update!` that works like `ActiveRecord::Base.update` but raises exceptions.
 
     This allows for the same behavior as the instance method `#update!` at a class level.
@@ -477,7 +538,7 @@
     *Eileen M. Uchitelle*
 
 *   `ActiveRecord::Calculations.calculate` called with `:average`
-    (aliased as `ActiveRecord::Calculations.average`) will now use column based
+    (aliased as `ActiveRecord::Calculations.average`) will now use column-based
     type casting. This means that floating-point number columns will now be
     aggregated as `Float` and decimal columns will be aggregated as `BigDecimal`.
 

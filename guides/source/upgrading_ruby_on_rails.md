@@ -162,6 +162,13 @@ processes have been updated you can set `config.active_support.cache_format_vers
 Rails 7.0 is able to read both formats so the cache won't be invalidated during the
 upgrade.
 
+### ActiveStorage video preview image generation
+
+Video preview image generation now uses FFmpeg's scene change detection to generate
+more meaningful preview images. Previously the first frame of the video would be used
+and that caused problems if the video faded in from black. This change requires
+FFmpeg v3.4+.
+
 Upgrading from Rails 6.0 to Rails 6.1
 -------------------------------------
 
@@ -1898,7 +1905,7 @@ this gem such as `whitelist_attributes` or `mass_assignment_sanitizer` options.
 
 * Rails 4.0 has deprecated `ActiveRecord::TestCase` in favor of `ActiveSupport::TestCase`.
 
-* Rails 4.0 has deprecated the old-style hash based finder API. This means that
+* Rails 4.0 has deprecated the old-style hash-based finder API. This means that
   methods which previously accepted "finder options" no longer do.  For example, `Book.find(:all, conditions: { name: '1984' })` has been deprecated in favor of `Book.where(name: '1984')`
 
 * All dynamic methods except for `find_by_...` and `find_by_...!` are deprecated.
